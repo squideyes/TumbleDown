@@ -86,8 +86,8 @@ namespace TumbleDown
                 }
             }
 
-            public string GetFullPath(string basePath) =>
-                Path.Combine(basePath, FileName);
+            public string GetFullPath(string folder) =>
+                Path.Combine(folder, FileName);
         }
 
         private HttpClient client = new HttpClient();
@@ -99,7 +99,7 @@ namespace TumbleDown
             this.logger = logger;
         }
 
-        private async Task<Root> GetRoot(string blogName, int start, Media media)
+        private async Task<Root> GetRootAsync(string blogName, int start, Media media)
         {
             var url = $"http://{blogName}.tumblr.com"
                 .AppendPathSegments("api", "read", "json")
@@ -114,11 +114,19 @@ namespace TumbleDown
 
             json = json.Substring(0, json.Length - 2);
 
-            return JsonConvert.DeserializeObject<Root>(json);
+            var root = JsonConvert.DeserializeObject<Root>(json);
+
+            if (root.Posts.Count() == 0)
+                return root;
+
+            logger.LogInformation(
+                $"Fetched {root.Posts.Count()} {blogName.ToUpper()} posts (Media: {media}, Start: {start:N0})");
+
+            return root;
         }
 
         public async Task<List<Post>> GetPostsAsync(
-            string blogName, string basePath, Media media)
+            string blogName, string folder, Media media)
         {
             var posts = new List<Post>();
 
@@ -128,7 +136,7 @@ namespace TumbleDown
 
             do
             {
-                root = await GetRoot(blogName, start, media);
+                root = await GetRootAsync(blogName, start, media);
 
                 if (root?.Posts?.Length > 0)
                     posts.AddRange(root.Posts);
@@ -141,13 +149,13 @@ namespace TumbleDown
                 return posts;
 
             var fileNames = new HashSet<string>(Directory.GetFiles(
-                basePath, "*.*").Select(f => Path.GetFileName(f)));
+                folder, "*.*").Select(f => Path.GetFileName(f)));
 
             return posts.Where(p => !string.IsNullOrWhiteSpace(p.Url)
                 && !fileNames.Contains(p.FileName)).ToList();
         }
 
-        public async Task FetchAndSaveFilesAsync(string basePath, List<Post> posts)
+        public async Task FetchAndSaveFilesAsync(string folder, List<Post> posts)
         {
             var worker = new ActionBlock<Post>(
                 async post =>
@@ -159,7 +167,7 @@ namespace TumbleDown
 
                     response.EnsureSuccessStatusCode();
 
-                    var fileName = Path.Combine(basePath, post.FileName);
+                    var fileName = Path.Combine(folder, post.FileName);
 
                     fileName.EnsurePathExists();
 
@@ -177,7 +185,12 @@ namespace TumbleDown
                         LastWriteTimeUtc = post.DateTime
                     };
 
-                    logger.LogInformation($"Downloaded \"{fileName}\"");
+                    logger.LogInformation(
+                        $"Downloaded {Path.GetFileName(fileName)} ({fileInfo.Length:N0} bytes)");
+                },
+                new ExecutionDataflowBlockOptions()
+                {
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
                 });
 
             posts.ForEach(post => worker.Post(post));

@@ -49,27 +49,31 @@ namespace TumbleDown
                 if (string.IsNullOrWhiteSpace(blogName.Value))
                     return ExitCode.NoBlogName;
 
+                // validate blog-name
+
                 var media = Media.All;
 
                 if (mediaOptions.HasValue())
                     media = mediaOptions.Value().ToEnum<Media>();
 
-                var basePath = pathOptions.Value();
+                var folder = pathOptions.Value();
 
-                if (!basePath.IsFolderName(false))
-                    basePath = "Downloads";
+                if (!folder.IsFolderName(false))
+                    folder = "Downloads";
 
-                if (basePath.EndsWith('/'))
-                    basePath += "/";
+                if (!folder.EndsWith('/'))
+                    folder += "/";
 
-                basePath.EnsurePathExists();
+                folder += blogName.Value + "/";
+
+                folder.EnsurePathExists();
 
                 var tumblr = new Tumblr(logger);
 
                 var posts = await tumblr.GetPostsAsync(
-                    blogName.Value, basePath, media);
+                    blogName.Value, folder, media);
 
-                await tumblr.FetchAndSaveFilesAsync(basePath, posts);
+                await tumblr.FetchAndSaveFilesAsync(folder, posts);
 
                 return ExitCode.Success;
             });
