@@ -120,7 +120,7 @@ namespace TumbleDown
                 return root;
 
             logger.LogInformation(
-                $"Fetched {root.Posts.Count()} {blogName.ToUpper()} posts (Media: {media}, Start: {start:N0})");
+                $"Fetched {root.Posts.Count()} {blogName.ToUpper()} posts (Media: {media.ToString().ToUpper()}, Start: {start:N0})");
 
             return root;
         }
