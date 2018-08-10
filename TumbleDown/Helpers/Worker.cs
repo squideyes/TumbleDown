@@ -31,7 +31,7 @@ namespace TumbleDown
                 CommandOptionType.SingleValue);
 
             var tagOptions = app.Option("-t|--tag <tag>",
-                "Only download photos and/or videos with this tag",
+                "Only download photos, videos and/or audios with this tag",
                 CommandOptionType.SingleValue);
 
             var pathOptions = app.Option("-p|--path <path>",
