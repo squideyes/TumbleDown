@@ -1,4 +1,6 @@
-TumbleDown is a simple command-line app that bulk-downloads all of the photos, videos and/or audios files from a particular Tumblr blog, with the option to limit your downloads by media and/or tag. To run the program issue a command like: **TumbleDown** <**BlogName**> [**Options**]
+TumbleDown is a simple command-line app that bulk-downloads all of the photos, videos and/or audios files from a particular Tumblr blog, with the option to limit the downloads by media and/or tag.
+
+To run TumblrDown issue a command like: **TumbleDown** <**BlogName**> [**Options**]
 
 |Kind|Value|Notes|
 |---|---|---|
