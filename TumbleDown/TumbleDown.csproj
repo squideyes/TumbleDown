@@ -7,6 +7,7 @@
     <Authors>Louis S. Berman</Authors>
     <Description>A simple Tumblr photo/video downloader</Description>
     <Copyright>Copyright 2018 by Louis S. Berman</Copyright>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

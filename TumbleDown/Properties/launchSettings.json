@@ -1,8 +1,7 @@
 {
   "profiles": {
     "TumbleDown": {
-      "commandName": "Project",
-      "commandLineArgs": "lolvideoslol"
+      "commandName": "Project"
     }
   }
 }
