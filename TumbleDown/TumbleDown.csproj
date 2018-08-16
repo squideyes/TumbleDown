@@ -5,7 +5,7 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <Company>SquidEyes, LLC</Company>
     <Authors>Louis S. Berman</Authors>
-    <Description>A simple Tumblr photo/video downloader</Description>
+    <Description>A simple Tumblr photo and video downloader</Description>
     <Copyright>Copyright 2018 by Louis S. Berman</Copyright>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -13,6 +13,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Link="README.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Flurl" Version="2.8.0" />

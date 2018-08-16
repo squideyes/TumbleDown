@@ -44,12 +44,12 @@ namespace TumbleDown
 
             app.HelpOption("-?|-h|--help");
 
-            var mediaOptions = app.Option("-m|--media <kind>",
-                "Download PHOTO, VIDEO, AUDIO or ALL media (Default: ALL)",
+            var tagOptions = app.Option("-t|--tag <tag>",
+                "Only download photos and/or videos with this tag",
                 CommandOptionType.SingleValue);
 
-            var tagOptions = app.Option("-t|--tag <tag>",
-                "Only download photos, videos and/or audios with this tag",
+            var mediaOptions = app.Option("-m|--media <kind>",
+                "Download PHOTO, VIDEO or ALL media (Default: ALL)",
                 CommandOptionType.SingleValue);
 
             var debugOptions = app.Option("-d|--debug",
@@ -59,7 +59,7 @@ namespace TumbleDown
                 "The UNC-path to save the media to (Default: \"Downloads\")",
                 CommandOptionType.SingleValue);
 
-            var threadsOptions = app.Option("-t|--thread <count>",
+            var threadsOptions = app.Option("-t|--threads <#>",
                 "The maximum number of download threads (1 to CPUs * 4)",
                 CommandOptionType.SingleValue);
 

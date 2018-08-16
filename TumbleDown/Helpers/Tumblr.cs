@@ -154,8 +154,6 @@ namespace TumbleDown
             public string GetFullPath(string folder) => Path.Combine(folder, FileName);
         }
 
-        private HttpClient client = new HttpClient();
-
         private readonly ILogger<Worker> logger;
 
         public Tumblr(ILogger<Worker> logger)
@@ -218,13 +216,15 @@ namespace TumbleDown
 
                     if (root?.Posts?.Length > 0)
                         root.Posts.Where(p => p.Uri != null).ToList().ForEach(p => posts.Add(p));
+
+                    await Task.Delay(400);
                 },
                 new ExecutionDataflowBlockOptions()
                 {
                     MaxDegreeOfParallelism = debugMode ? 1 : threads
                 });
 
-            Enumerable.Range(1, chunks).ToList().ForEach(x => worker.Post(x * 50));
+            Enumerable.Range(1, chunks).ToList().ForEach(x => worker.Post(root.FirstPost + (x * 50)));
 
             worker.Complete();
 
@@ -250,7 +250,7 @@ namespace TumbleDown
 
                     try
                     {
-                        response = await client.GetAsync(post.Uri);
+                        response = await new HttpClient().GetAsync(post.Uri);
 
                         response.EnsureSuccessStatusCode();
                     }
