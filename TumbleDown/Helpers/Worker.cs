@@ -18,6 +18,7 @@
 using Microsoft.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Text.RegularExpressions;
 
 namespace TumbleDown
 {
@@ -59,7 +60,7 @@ namespace TumbleDown
                 CommandOptionType.SingleValue);
 
             var threadsOptions = app.Option("-t|--thread <count>",
-                "The maximum number of download threads (1 to CPUs * 4)", 
+                "The maximum number of download threads (1 to CPUs * 4)",
                 CommandOptionType.SingleValue);
 
             var blogName = app.Argument("BlogName",
@@ -75,7 +76,12 @@ namespace TumbleDown
 
                 try
                 {
-                    // TODO: validate blog-name
+                    var blogNameRegex = new Regex(@"^[a-z0-9\-]{3,32}$");
+
+                    if (!blogNameRegex.IsMatch(blogName.Value))
+                        return ExitCode.BadBlogName;
+
+                    var name = blogName.Value.ToLower();
 
                     var media = Media.All;
 
@@ -90,13 +96,13 @@ namespace TumbleDown
                     if (!folder.EndsWith('/'))
                         folder += "/";
 
-                    folder += blogName.Value + "/";
+                    folder += name + "/";
 
                     folder.EnsurePathExists();
 
-                    int threads = 4;
+                    int threads = Environment.ProcessorCount;
 
-                    if(threadsOptions.HasValue())
+                    if (threadsOptions.HasValue())
                         threads = int.Parse(threadsOptions.Value());
 
                     if (threads < 1 || threads >= Environment.ProcessorCount * 4)
@@ -105,7 +111,7 @@ namespace TumbleDown
                     var tumblr = new Tumblr(logger);
 
                     var posts = await tumblr.GetPostsAsync(
-                        blogName.Value, folder, media, debugOptions.HasValue(), threads);
+                        name, folder, media, debugOptions.HasValue(), threads);
 
                     await tumblr.FetchAndSaveFilesAsync(
                         folder, posts, debugOptions.HasValue(), threads);

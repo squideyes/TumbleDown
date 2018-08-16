@@ -282,7 +282,7 @@ namespace TumbleDown
                         };
 
                         logger.LogInformation(
-                            $"Downloaded {Path.GetFileName(fileName)} ({fileInfo.Length:N0} bytes, Uri: {post.Uri})");
+                            $"Downloaded {Path.GetFileName(fileName)} from {post.Uri} ({fileInfo.Length:N0} bytes)");
                     }
                     catch (Exception error)
                     {

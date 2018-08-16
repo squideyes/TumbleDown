@@ -1,7 +1,8 @@
 {
   "profiles": {
     "TumbleDown": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "fuckyeahvintagepostcards-blog"
     }
   }
 }
