@@ -34,6 +34,9 @@ namespace TumbleDown
                 "Only download photos, videos and/or audios with this tag",
                 CommandOptionType.SingleValue);
 
+            var debugOptions = app.Option("-d|--debug",
+                "Run the program in debug mode.", CommandOptionType.NoValue);
+
             var pathOptions = app.Option("-p|--path <path>",
                 "The UNC-path to save the media to (Default: \"Downloads\")",
                 CommandOptionType.SingleValue);
@@ -71,9 +74,10 @@ namespace TumbleDown
                 var tumblr = new Tumblr(logger);
 
                 var posts = await tumblr.GetPostsAsync(
-                    blogName.Value, folder, media);
+                    blogName.Value, folder, media, debugOptions.HasValue());
 
-                await tumblr.FetchAndSaveFilesAsync(folder, posts);
+                await tumblr.FetchAndSaveFilesAsync(
+                    folder, posts, debugOptions.HasValue());
 
                 return ExitCode.Success;
             });

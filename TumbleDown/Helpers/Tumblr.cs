@@ -27,6 +27,8 @@ using System;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
+using Newtonsoft.Json.Converters;
+using HtmlAgilityPack;
 
 namespace TumbleDown
 {
@@ -64,14 +66,74 @@ namespace TumbleDown
             [JsonProperty(PropertyName = "id")]
             public string Id { get; set; }
 
-            [JsonProperty(PropertyName = "type")]
-            public string Type { get; set; }
-
             [JsonProperty(PropertyName = "date-gmt")]
             public DateTime DateTime { get; set; }
 
+            [JsonProperty(PropertyName = "type")]
+            private string Type { get; set; }
+
             [JsonProperty(PropertyName = "photo-url-1280")]
-            public string Url { get; set; }
+            private string PhotoUrl { get; set; }
+
+            [JsonProperty(PropertyName = "video-player")]
+            private string VideoPlayer { get; set; }
+
+            public Media? Media
+            {
+                get
+                {
+                    switch (Type)
+                    {
+                        case "photo":
+                            return TumbleDown.Media.Photo;
+                        case "video":
+                            return TumbleDown.Media.Video;
+                        default:
+                            return null;
+                    }
+                }
+            }
+
+            private HtmlNode VideoSource
+            {
+                get
+                {
+                    var doc = new HtmlDocument();
+
+                    doc.LoadHtml(VideoPlayer);
+
+                    var video = doc.DocumentNode
+                        .Descendants("video").FirstOrDefault();
+
+                    if (video == null)
+                        return null;
+
+                    return video.SelectNodes("source").FirstOrDefault();
+                }
+            }
+
+            public Uri Uri
+            {
+                get
+                {
+                    if (!Media.HasValue)
+                        return null;
+
+                    if (Media == TumbleDown.Media.Photo)
+                    {
+                        return new Uri(PhotoUrl);
+                    }
+                    else
+                    {
+                        var source = VideoSource;
+
+                        if (source == null)
+                            return null;
+
+                        return new Uri(source.Attributes["src"].Value);
+                    }
+                }
+            }
 
             public string FileName
             {
@@ -80,7 +142,24 @@ namespace TumbleDown
                     var sb = new StringBuilder();
 
                     sb.Append(Id);
-                    sb.Append(Path.GetExtension(Url).ToLower());
+
+                    switch (Media)
+                    {
+                        case TumbleDown.Media.Video:
+                            switch (VideoSource.Attributes["type"].Value.ToLower())
+                            {
+                                case "video/mp4":
+                                    sb.Append(".mp4");
+                                    break;
+                                default:
+                                    // log the error
+                                    break;
+                            }
+                            break;
+                        case TumbleDown.Media.Photo:
+                            sb.Append(Path.GetExtension(Uri.AbsoluteUri).ToLower());
+                            break;
+                    }
 
                     return sb.ToString();
                 }
@@ -102,8 +181,7 @@ namespace TumbleDown
         private async Task<Root> GetRootAsync(string blogName, int start, Media media)
         {
             var url = $"http://{blogName}.tumblr.com"
-                .AppendPathSegments("api", "read", "json")
-                .SetQueryParams(new { start, num = 50 });
+                .AppendPathSegments("api", "read", "json").SetQueryParams(new { start, num = 50 });
 
             if (media != Media.All)
                 url.SetQueryParam("type", media.ToString().ToLower());
@@ -119,14 +197,19 @@ namespace TumbleDown
             if (root.Posts.Count() == 0)
                 return root;
 
-            logger.LogInformation(
-                $"Fetched {root.Posts.Count()} {blogName.ToUpper()} posts (Media: {media.ToString().ToUpper()}, Start: {start:N0})");
+            var fetched = root.Posts.Count();
+
+            var mediaKind = media.ToString().ToUpper();
+
+            root.Posts = root.Posts.Where(p => p.Uri != null).ToArray();
+
+            logger.LogDebug($"Fetched {fetched} posts (Blog: {blogName}, Media: {mediaKind}, Start: {start:N0})");
 
             return root;
         }
 
         public async Task<List<Post>> GetPostsAsync(
-            string blogName, string folder, Media media)
+            string blogName, string folder, Media media, bool debugMode)
         {
             var posts = new List<Post>();
 
@@ -139,11 +222,16 @@ namespace TumbleDown
                 root = await GetRootAsync(blogName, start, media);
 
                 if (root?.Posts?.Length > 0)
-                    posts.AddRange(root.Posts);
+                    posts.AddRange(root.Posts.Where(p => p.Uri != null));
+
+                if (debugMode)
+                    break;
 
                 start += 50;
             }
             while (root?.Posts?.Count() > 0);
+
+            logger.LogDebug($"Found {posts.Count:N0} posts with valid Uris.");
 
             if (posts.Count == 0)
                 return posts;
@@ -151,19 +239,15 @@ namespace TumbleDown
             var fileNames = new HashSet<string>(Directory.GetFiles(
                 folder, "*.*").Select(f => Path.GetFileName(f)));
 
-            return posts.Where(p => !string.IsNullOrWhiteSpace(p.Url)
-                && !fileNames.Contains(p.FileName)).ToList();
+            return posts.Where(p => !fileNames.Contains(p.FileName)).ToList();
         }
 
-        public async Task FetchAndSaveFilesAsync(string folder, List<Post> posts)
+        public async Task FetchAndSaveFilesAsync(string folder, List<Post> posts, bool debugMode)
         {
             var worker = new ActionBlock<Post>(
                 async post =>
                 {
-                    if (!Uri.TryCreate(post.Url, UriKind.Absolute, out Uri uri))
-                        return;
-
-                    var response = await client.GetAsync(post.Url);
+                    var response = await client.GetAsync(post.Uri);
 
                     response.EnsureSuccessStatusCode();
 
@@ -190,7 +274,7 @@ namespace TumbleDown
                 },
                 new ExecutionDataflowBlockOptions()
                 {
-                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                    MaxDegreeOfParallelism = debugMode ? 1 : Environment.ProcessorCount
                 });
 
             posts.ForEach(post => worker.Post(post));

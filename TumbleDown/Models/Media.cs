@@ -21,7 +21,6 @@ namespace TumbleDown
     {
         Photo = 1,
         Video = 2,
-        Audio = 3,
-        All = 4
+        All = 3
     }
 }

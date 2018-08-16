@@ -2,7 +2,7 @@
   "profiles": {
     "TumbleDown": {
       "commandName": "Project",
-      "commandLineArgs": "fuckyeahvintagepostcards-blog"
+      "commandLineArgs": "lolvideoslol --debug"
     }
   }
 }
