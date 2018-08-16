@@ -2,7 +2,7 @@
   "profiles": {
     "TumbleDown": {
       "commandName": "Project",
-      "commandLineArgs": "lolvideoslol --debug"
+      "commandLineArgs": "lolvideoslol"
     }
   }
 }

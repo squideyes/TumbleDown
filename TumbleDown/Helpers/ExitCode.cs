@@ -23,6 +23,7 @@ namespace TumbleDown
         public const int NoArgs = -1;
         public const int NoBlogName = -2;
         public const int ParseError = -3;
-        public const int RuntimeError = -4;
+        public const int BadThreads = -4;
+        public const int RuntimeError = -5;
     }
 }

@@ -41,6 +41,10 @@ namespace TumbleDown
                 "The UNC-path to save the media to (Default: \"Downloads\")",
                 CommandOptionType.SingleValue);
 
+            var threadsOptions = app.Option("-t|--thread <count>",
+                "The maximum number of download threads (1 to CPUs * 4)", 
+                CommandOptionType.SingleValue);
+
             var blogName = app.Argument("BlogName",
                 "The name of a Tumblr blog that contains photos, videos and/or audios");
 
@@ -52,34 +56,51 @@ namespace TumbleDown
                 if (string.IsNullOrWhiteSpace(blogName.Value))
                     return ExitCode.NoBlogName;
 
-                // validate blog-name
+                try
+                {
+                    // TODO: validate blog-name
 
-                var media = Media.All;
+                    var media = Media.All;
 
-                if (mediaOptions.HasValue())
-                    media = mediaOptions.Value().ToEnum<Media>();
+                    if (mediaOptions.HasValue())
+                        media = mediaOptions.Value().ToEnum<Media>();
 
-                var folder = pathOptions.Value();
+                    var folder = pathOptions.Value();
 
-                if (!folder.IsFolderName(false))
-                    folder = "Downloads";
+                    if (!folder.IsFolderName(false))
+                        folder = "Downloads";
 
-                if (!folder.EndsWith('/'))
-                    folder += "/";
+                    if (!folder.EndsWith('/'))
+                        folder += "/";
 
-                folder += blogName.Value + "/";
+                    folder += blogName.Value + "/";
 
-                folder.EnsurePathExists();
+                    folder.EnsurePathExists();
 
-                var tumblr = new Tumblr(logger);
+                    int threads = 4;
 
-                var posts = await tumblr.GetPostsAsync(
-                    blogName.Value, folder, media, debugOptions.HasValue());
+                    if(threadsOptions.HasValue())
+                        threads = int.Parse(threadsOptions.Value());
 
-                await tumblr.FetchAndSaveFilesAsync(
-                    folder, posts, debugOptions.HasValue());
+                    if (threads < 1 || threads >= Environment.ProcessorCount * 4)
+                        return ExitCode.BadThreads;
 
-                return ExitCode.Success;
+                    var tumblr = new Tumblr(logger);
+
+                    var posts = await tumblr.GetPostsAsync(
+                        blogName.Value, folder, media, debugOptions.HasValue(), threads);
+
+                    await tumblr.FetchAndSaveFilesAsync(
+                        folder, posts, debugOptions.HasValue(), threads);
+
+                    return ExitCode.Success;
+                }
+                catch (Exception error)
+                {
+                    logger.LogError(error, "An unexpected failure occured.");
+
+                    return ExitCode.RuntimeError;
+                }
             });
 
             try
@@ -100,7 +121,7 @@ namespace TumbleDown
                 Console.WriteLine();
                 Console.WriteLine(error.Message);
 
-                logger.LogWarning(error, 
+                logger.LogWarning(error,
                     "The command-line could not be parsed.");
 
                 return ExitCode.ParseError;

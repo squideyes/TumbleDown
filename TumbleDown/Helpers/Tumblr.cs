@@ -16,19 +16,19 @@
 // along with TumbleDown.  If not, see <http://www.gnu.org/licenses/>.
 
 using Flurl;
-using System.Linq;
 using Flurl.Http;
+using HtmlAgilityPack;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
-using System.Net.Http;
-using System.IO;
-using System;
-using System.Text;
-using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
-using Newtonsoft.Json.Converters;
-using HtmlAgilityPack;
 
 namespace TumbleDown
 {
@@ -36,9 +36,6 @@ namespace TumbleDown
     {
         public class Root
         {
-            [JsonProperty(PropertyName = "tumblelog")]
-            public Info Info { get; set; }
-
             [JsonProperty(PropertyName = "posts-start")]
             public int FirstPost { get; set; }
 
@@ -47,18 +44,6 @@ namespace TumbleDown
 
             [JsonProperty(PropertyName = "posts")]
             public Post[] Posts { get; set; }
-        }
-
-        public class Info
-        {
-            [JsonProperty(PropertyName = "title")]
-            public string Title { get; set; }
-
-            [JsonProperty(PropertyName = "name")]
-            public string Name { get; set; }
-
-            [JsonProperty(PropertyName = "description")]
-            public string Description { get; set; }
         }
 
         public class Post
@@ -146,13 +131,14 @@ namespace TumbleDown
                     switch (Media)
                     {
                         case TumbleDown.Media.Video:
-                            switch (VideoSource.Attributes["type"].Value.ToLower())
+                            var source = VideoSource.Attributes["type"].Value.ToLower();
+                            switch (source)
                             {
                                 case "video/mp4":
                                     sb.Append(".mp4");
                                     break;
                                 default:
-                                    // log the error
+                                    sb.Append(".octets");
                                     break;
                             }
                             break;
@@ -165,8 +151,7 @@ namespace TumbleDown
                 }
             }
 
-            public string GetFullPath(string folder) =>
-                Path.Combine(folder, FileName);
+            public string GetFullPath(string folder) => Path.Combine(folder, FileName);
         }
 
         private HttpClient client = new HttpClient();
@@ -209,32 +194,46 @@ namespace TumbleDown
         }
 
         public async Task<List<Post>> GetPostsAsync(
-            string blogName, string folder, Media media, bool debugMode)
+            string blogName, string folder, Media media, bool debugMode, int threads)
         {
-            var posts = new List<Post>();
-
-            int start = 0;
+            var posts = new ConcurrentBag<Post>();
 
             Root root;
 
-            do
-            {
-                root = await GetRootAsync(blogName, start, media);
+            root = await GetRootAsync(blogName, 0, media);
 
-                if (root?.Posts?.Length > 0)
-                    posts.AddRange(root.Posts.Where(p => p.Uri != null));
+            if (root?.Posts?.Length > 0)
+                root.Posts.Where(p => p.Uri != null).ToList().ForEach(p => posts.Add(p));
 
-                if (debugMode)
-                    break;
+            if (debugMode || root.TotalPosts - root.FirstPost < 50)
+                return posts.ToList();
 
-                start += 50;
-            }
-            while (root?.Posts?.Count() > 0);
+            var chunks = (root.TotalPosts - root.FirstPost - 50)
+                .Funcify(x => (x / 50) + (x % 50 > 0 ? 1 : 0));
+
+            var worker = new ActionBlock<int>(
+                async start =>
+                {
+                    root = await GetRootAsync(blogName, start, media);
+
+                    if (root?.Posts?.Length > 0)
+                        root.Posts.Where(p => p.Uri != null).ToList().ForEach(p => posts.Add(p));
+                },
+                new ExecutionDataflowBlockOptions()
+                {
+                    MaxDegreeOfParallelism = debugMode ? 1 : threads
+                });
+
+            Enumerable.Range(1, chunks).ToList().ForEach(x => worker.Post(x * 50));
+
+            worker.Complete();
+
+            await worker.Completion;
 
             logger.LogDebug($"Found {posts.Count:N0} posts with valid Uris.");
 
             if (posts.Count == 0)
-                return posts;
+                return posts.ToList();
 
             var fileNames = new HashSet<string>(Directory.GetFiles(
                 folder, "*.*").Select(f => Path.GetFileName(f)));
@@ -242,39 +241,57 @@ namespace TumbleDown
             return posts.Where(p => !fileNames.Contains(p.FileName)).ToList();
         }
 
-        public async Task FetchAndSaveFilesAsync(string folder, List<Post> posts, bool debugMode)
+        public async Task FetchAndSaveFilesAsync(string folder, List<Post> posts, bool debugMode, int threads)
         {
             var worker = new ActionBlock<Post>(
                 async post =>
                 {
-                    var response = await client.GetAsync(post.Uri);
+                    HttpResponseMessage response = null;
 
-                    response.EnsureSuccessStatusCode();
+                    try
+                    {
+                        response = await client.GetAsync(post.Uri);
+
+                        response.EnsureSuccessStatusCode();
+                    }
+                    catch (Exception error)
+                    {
+                        logger.LogWarning(error, $"Error fetching \"{post.Uri}\" (Message: {error.Message})");
+
+                        return;
+                    }
 
                     var fileName = Path.Combine(folder, post.FileName);
 
-                    fileName.EnsurePathExists();
-
-                    using (var target = File.OpenWrite(fileName))
+                    try
                     {
-                        var source = await response
-                            .Content.ReadAsStreamAsync();
+                        fileName.EnsurePathExists();
 
-                        await source.CopyToAsync(target);
-                    };
+                        using (var target = File.OpenWrite(fileName))
+                        {
+                            var source = await response
+                                .Content.ReadAsStreamAsync();
 
-                    var fileInfo = new FileInfo(fileName)
+                            await source.CopyToAsync(target);
+                        };
+
+                        var fileInfo = new FileInfo(fileName)
+                        {
+                            CreationTimeUtc = post.DateTime,
+                            LastWriteTimeUtc = post.DateTime
+                        };
+
+                        logger.LogInformation(
+                            $"Downloaded {Path.GetFileName(fileName)} ({fileInfo.Length:N0} bytes, Uri: {post.Uri})");
+                    }
+                    catch (Exception error)
                     {
-                        CreationTimeUtc = post.DateTime,
-                        LastWriteTimeUtc = post.DateTime
-                    };
-
-                    logger.LogInformation(
-                        $"Downloaded {Path.GetFileName(fileName)} ({fileInfo.Length:N0} bytes)");
+                        logger.LogError(error, $"Error saving \"{fileName}\" (Message: {error.Message})");
+                    }
                 },
                 new ExecutionDataflowBlockOptions()
                 {
-                    MaxDegreeOfParallelism = debugMode ? 1 : Environment.ProcessorCount
+                    MaxDegreeOfParallelism = debugMode ? 1 : threads
                 });
 
             posts.ForEach(post => worker.Post(post));
